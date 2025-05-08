@@ -1,5 +1,6 @@
 from langchain.tools import tool
 import requests
+import os
 
 @tool
 def search_recipes(preferences: dict) -> list:
@@ -7,8 +8,11 @@ def search_recipes(preferences: dict) -> list:
     Search for recipes using an external recipe API based on user preferences.
     Expects a dictionary with ingredients, cuisine, diet, allergies, etc.
     """
-    # Example: Using Spoonacular (you could also call a local web search tool or use MCP proxy)
-    api_key = "2e7a0f619dc24c969bc049f109c18b2c"
+    # Get API key from environment variable
+    api_key = os.getenv("SPOONACULAR_API_KEY")
+    if not api_key:
+        raise ValueError("SPOONACULAR_API_KEY environment variable is not set")
+        
     url = "https://api.spoonacular.com/recipes/complexSearch"
 
     params = {
