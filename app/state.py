@@ -27,7 +27,9 @@ class Preferences(BaseModel):
 
     @validator('prep_time')
     def validate_prep_time(cls, v):
-        if v is not None and not v.isdigit():
+        if v is None or v == "not specified":
+            return None
+        if not v.isdigit():
             raise ValueError('Prep time must be a number')
         return v
 
