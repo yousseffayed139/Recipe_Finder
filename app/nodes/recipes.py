@@ -1,7 +1,7 @@
 # recipe_agent/mcp/controller/recipe_controller.py
 
 import requests
-from recipe_agent.app.state import RecipeState
+from app.state import RecipeState
 from typing import List
 import os
 from dotenv import load_dotenv

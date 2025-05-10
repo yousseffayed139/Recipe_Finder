@@ -1,5 +1,6 @@
 
 recipe_agent/Recipe_Finder/.env
+.env
 __pycache__/
 *.pyc
 */__pycache__/

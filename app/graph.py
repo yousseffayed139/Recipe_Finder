@@ -1,7 +1,7 @@
 from typing import Dict, Any
 from langgraph.graph import StateGraph
-from recipe_agent.app.state import RecipeState, initial_state
-from recipe_agent.app.nodes.recipes import RecipeController
+from app.state import RecipeState, initial_state
+from app.nodes.recipes import RecipeController
 
 
 # Initialize MCP components

@@ -1,5 +1,5 @@
-from recipe_agent.app.state import RecipeState, initial_state
-from recipe_agent.app.graph import build_recipe_graph
+from app.state import RecipeState, initial_state
+from app.graph import build_recipe_graph
 
 def main():
     graph = build_recipe_graph()

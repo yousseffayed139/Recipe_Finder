@@ -10,7 +10,7 @@ load_dotenv(env_path)
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
-from recipe_agent.app.main import main
+from app.main import main
 
 if __name__ == "__main__":
     main() 
