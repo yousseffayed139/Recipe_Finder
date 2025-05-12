@@ -1,64 +1,13 @@
 from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 from app.state import RecipeState, initial_state
-from app.nodes.recipes import RecipeController
-from app.nodes.llm_helper import query_llm_for_preferences
-
+from app.Controller.llm_helper import query_llm_for_preferences
+from app.agent.recipe_agent import recipe_agent
 
 
 # Initialize MCP components
-recipe_controller = RecipeController()
-
-
-# def ask_ingredients(state: Dict[str, Any]) -> Dict[str, Any]:
-#     """Ask user for available ingredients."""
-#     print("\nWhat ingredients do you have available? (Enter one per line, press Enter twice to finish)")
-#     ingredients = []
-#     while True:
-#         ingredient = input("> ").strip()
-#         if not ingredient:
-#             break
-#         ingredients.append(ingredient)
-    
-#     # Convert dict to RecipeState, update ingredients, then convert back
-#     recipe_state = RecipeState.model_validate(state)
-#     recipe_state.ingredients = ingredients
-#     return recipe_state.model_dump()
-
-# def ask_preferences(state: Dict[str, Any]) -> Dict[str, Any]:
-#     """Ask user for recipe preferences."""
-#     print("\nWhat are your preferences?")
-    
-#     # Ask for dietary restrictions
-#     print("\nDo you have any dietary restrictions? (e.g., vegetarian, vegan, gluten-free)")
-#     diet = input("> ").strip() or None
-    
-#     # Ask for allergies
-#     print("\nDo you have any allergies? (Enter one per line, press Enter twice to finish)")
-#     allergies = []
-#     while True:
-#         allergy = input("> ").strip()
-#         if not allergy:
-#             break
-#         allergies.append(allergy)
-    
-#     # Ask for cuisine preference
-#     print("\nWhat type of cuisine do you prefer? (e.g., Italian, Chinese, Mexican)")
-#     cuisine = input("> ").strip() or None
-    
-#     # Ask for maximum prep time
-#     print("\nWhat's the maximum preparation time you're willing to spend? (in minutes)")
-#     prep_time = input("> ").strip() or None
-    
-#     # Convert dict to RecipeState, update preferences, then convert back
-#     recipe_state = RecipeState.model_validate(state)
-#     recipe_state.preferences.diet = diet
-#     recipe_state.preferences.allergies = allergies
-#     recipe_state.preferences.cuisine = cuisine
-#     recipe_state.preferences.prep_time = prep_time
-#     return recipe_state.model_dump()
-
-
+# recipe_controller = RecipeController()
+recipe_agentt = recipe_agent
 conversation_history = ""
 
 def collect_user_info(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -91,33 +40,32 @@ def collect_user_info(state: Dict[str, Any]) -> Dict[str, Any]:
     print("Current state test:", recipe_state.model_dump())
     return recipe_state.model_dump()
 
+ 
+
 def find_recipes(state: Dict[str, Any]) -> Dict[str, Any]:
-    """Find and display matching recipes."""
-    # Convert dict to RecipeState
     recipe_state = RecipeState.model_validate(state)
-    
-    # Get matching recipes
-    matching_recipes = recipe_controller.get_matching_recipes(recipe_state)
-    
-   
-    print(matching_recipes)
+
+    # Construct a natural language prompt using the state
+    prompt = (
+        f"Find me a recipe using the following ingredients: {', '.join(recipe_state.ingredients)}.\n"
+        f"My dietary preferences are: {recipe_state.preferences.diet}.\n"
+        f"I have allergies to: {', '.join(recipe_state.preferences.allergies)}.\n"
+        f"I prefer {recipe_state.preferences.cuisine} cuisine.\n"
+        f"I want something that takes less than {recipe_state.preferences.prep_time} minutes to prepare.\n"
+        f"I'm craving: {recipe_state.preferences.craving}."
+    )
+
+    # Use proper chat-style input for create_react_agent
+    result = recipe_agent.invoke({
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    })
+
+    print("Agent response:\n", result)
     return state
 
-# def build_recipe_graph() -> StateGraph:
-#     """Build the recipe finder state graph."""
-#     # Create the graph
-#     workflow = StateGraph(RecipeState)
-#     def is_done(state: Dict[str, Any]) -> str:
-#         return "find_recipes" if state.get("done") else "collect_user_info"
-    
-#     workflow.add_node("collect_user_info", collect_user_info)
-#     workflow.add_node("find_recipes", find_recipes)
-    
-#     workflow.add_edge("collect_user_info", is_done)
-#     workflow.add_edge("find_recipes", END)
-    
-#     workflow.set_entry_point("collect_user_info")
-#     return workflow.compile()
+
 
 
 def build_recipe_graph() -> StateGraph:

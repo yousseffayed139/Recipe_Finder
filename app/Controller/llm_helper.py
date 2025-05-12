@@ -19,7 +19,7 @@ You are a helpful cooking assistant. Extract the following fields from the user'
 Important notes:
 - prep_time must be a number (e.g., "30" for 30 minutes) or null if not specified
 - allergies should be a list of specific allergies
-- diet should be a specific diet type (e.g., "vegetarian", "vegan", "halal")
+- diet should be a specific diet type (e.g., "vegetarian", "vegan", "halal", "Keto", "zero sugar", "low sugar", "low carb")
 - cuisine should be a specific cuisine type (e.g., "Italian", "Chinese", "Mexican")
 
 Conversation:
