@@ -35,6 +35,12 @@ class Preferences(BaseModel):
 
 class RecipeState(BaseModel):
     """Main state for the recipe finding workflow."""
+    iterations: int = Field(default=0, description="Number of user info collection attempts")
+
+    messages: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="Conversation history as list of {'role': ..., 'content': ...}"
+    )
     ingredients: List[str] = Field(
         default_factory=list,
         description="Available ingredients"
@@ -81,4 +87,4 @@ class RecipeState(BaseModel):
         }
 
 # Create initial state
-initial_state = RecipeState()
+initial_state = RecipeState(messages=[])

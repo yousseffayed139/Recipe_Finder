@@ -1,5 +1,5 @@
-from app.state import RecipeState, initial_state
-from app.graph import build_recipe_graph
+from state import RecipeState, initial_state
+from graph import build_recipe_graph
 
 def main():
     graph = build_recipe_graph()

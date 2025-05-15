@@ -1,6 +1,6 @@
 # app/controller/recipe_controller.py
-from app.agent.tools.spoonacular_tool import spoonacular_search
-from app.agent.tools.tavily_tool import tavily_search
+from agent.tools.spoonacular_tool import spoonacular_search
+from agent.tools.tavily_tool import tavily_search
 
 def get_recipe(user_prefs: dict) -> str:
     """
