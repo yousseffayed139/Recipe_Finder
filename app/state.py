@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, validator
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 class Preferences(BaseModel):
@@ -33,9 +33,23 @@ class Preferences(BaseModel):
             raise ValueError('Prep time must be a number')
         return v
 
+class Recipe(BaseModel):
+    """Model for a recipe."""
+    title: str = Field(default="", description="Recipe title")
+    image_url: Optional[str] = Field(default=None, description="URL to recipe image")
+    ingredients: List[str] = Field(default_factory=list, description="List of ingredients with quantities")
+    instructions: List[str] = Field(default_factory=list, description="Step-by-step cooking instructions")
+    grocery_list: List[str] = Field(default_factory=list, description="Additional items needed")
+    calories: Optional[int] = Field(default=None, description="Calorie count")
+    
+    class Config:
+        """Allow extra fields for flexibility."""
+        extra = "allow"
+
 class RecipeState(BaseModel):
     """Main state for the recipe finding workflow."""
     iterations: int = Field(default=0, description="Number of user info collection attempts")
+    force_pause: bool = Field(default=False, description="Flag to force waiting for user input")
 
     messages: List[Dict[str, str]] = Field(
         default_factory=list,
@@ -49,9 +63,9 @@ class RecipeState(BaseModel):
         default_factory=Preferences,
         description="User preferences for recipe selection"
     )
-    recipes: List[str] = Field(
+    recipes: List[Dict[str, Any]] = Field(
         default_factory=list,
-        description="List of suggested recipes"
+        description="List of recipe objects"
     )
     grocery_list: List[str] = Field(
         default_factory=list,
@@ -73,6 +87,7 @@ class RecipeState(BaseModel):
     class Config:
         """Pydantic model configuration."""
         arbitrary_types_allowed = True
+        extra = "allow"  # Allow extra fields for flexibility
         json_schema_extra = {
             "example": {
                 "ingredients": ["chicken", "rice"],

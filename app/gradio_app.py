@@ -1,55 +1,127 @@
 import gradio as gr
-import ast
 import json
 import sys
 import os
+import traceback
+import logging
+from pydantic import ValidationError
 
 # Allow running as a script
 if __name__ == "__main__":
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from graph import build_recipe_graph
-from state import initial_state, RecipeState
+from state import RecipeState
 
-# Helper to parse agent output (list of recipes as JSON-like string)
-def parse_recipes(agent_response):
-    try:
-        if isinstance(agent_response, list):
-            return agent_response
-        # Try to parse as Python list of dicts
-        if isinstance(agent_response, str):
-            # Convert single quotes to double quotes for JSON parsing
-            clean_json = agent_response.replace("'", '"')
-            return json.loads(clean_json)
-    except Exception as e:
-        print(f"DEBUG: Error parsing recipe JSON: {e}")
-    return []
+# Set up minimal logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%H:%M:%S')
+logger = logging.getLogger("gradio_app")
 
 graph = build_recipe_graph()
 
+# Initialize the state with defaults
+def get_initial_state():
+    return RecipeState().model_dump()
+
 # Session state for chat
 def chat_interface(user_message, history, state):
-    # Update state with user message
+    logger.info("Processing user message")
+    
+    # Initialize state if empty
+    if not state:
+        state = get_initial_state()
+        logger.info("Initialized new state")
+    
+    # Update state with new user message
     if "messages" not in state:
         state["messages"] = []
+    
+    # Add the user message to the state
     state["messages"].append({"role": "user", "content": user_message})
-
-    # Run the graph with increased recursion limit
+    
+    # Check if the previous state had force_pause set
+    was_waiting_for_input = state.get("force_pause", False)
+    if was_waiting_for_input:
+        logger.info("Continuing after pause for user input")
+    
+    # Run the graph with increased recursion limit and proper error handling
     try:
+        # First, validate the state to ensure it's compatible with our model
+        valid_state = RecipeState.model_validate(state)
+        
+        # Run the graph with the validated state
+        logger.info("Invoking graph")
         result = graph.invoke(
-            RecipeState.model_validate(state).model_dump(),
+            valid_state.model_dump(),
             config={"recursion_limit": 5}
         )
+        logger.info("Graph execution completed")
+    except ValidationError as ve:
+        # Try to fix common validation issues
+        try:
+            logger.info("Validation error, attempting to fix")
+            # If we have recipe objects but they're not in the right format
+            if "recipes" in state and state["recipes"] and isinstance(state["recipes"], list):
+                # Make sure recipes are dictionaries
+                fixed_recipes = []
+                for recipe in state["recipes"]:
+                    if isinstance(recipe, dict):
+                        fixed_recipes.append(recipe)
+                state["recipes"] = fixed_recipes
+                
+            # Try again with the fixed state
+            valid_state = RecipeState.model_validate(state)
+            result = graph.invoke(
+                valid_state.model_dump(),
+                config={"recursion_limit": 5}
+            )
+            logger.info("Successfully fixed validation error")
+        except Exception:
+            logger.info("Failed to fix validation error")
+            history.append({"role": "user", "content": user_message})
+            history.append({"role": "assistant", "content": "I encountered an issue processing your information. Please try again with specific ingredients you'd like to use."})
+            # Reset the state to avoid continuing problems
+            state = get_initial_state()
+            state["messages"] = [{"role": "user", "content": user_message}]
+            return "", history, state
     except Exception:
+        logger.info("Graph execution error")
         # Return a reasonable fallback response
         history.append({"role": "user", "content": user_message})
-        history.append({"role": "assistant", "content": "Sorry, I encountered an error processing your request. Please try again with more specific information about ingredients and preferences."})
+        history.append({"role": "assistant", "content": "Sorry, I encountered an error processing your request. Please try again with specific ingredients you have available."})
+        # Don't lose the message history
+        if "messages" in state:
+            messages = state["messages"]
+            state = get_initial_state()
+            state["messages"] = messages
         return "", history, state
+
+    # Check if the graph is waiting for user input (force_pause flag is set)
+    is_waiting_for_input = result.get("force_pause", False)
+    
+    # If the system is waiting for user input, display the last assistant message
+    if is_waiting_for_input:
+        logger.info("Paused for user input")
+        assistant_messages = [msg for msg in result.get("messages", []) if msg.get("role") == "assistant"]
+        
+        if assistant_messages:
+            latest_message = assistant_messages[-1]
+            prompt_message = latest_message.get("content", "")
+            
+            # Add this message to the UI history
+            history.append({"role": "user", "content": user_message})
+            history.append({"role": "assistant", "content": prompt_message})
+            
+            # Update the state 
+            state = result
+            
+            return "", history, state
 
     # Extract the recipes from the state
     recipes = result.get("recipes", [])
+    logger.info(f"Found {len(recipes)} recipes")
 
-    # Show extracted ingredients and preferences in the response
+    # Add extracted information to the response
     extracted_info = f"I extracted the following information from our conversation:\n"
     extracted_info += f"- Ingredients: {', '.join(result.get('ingredients', []) or ['None detected'])}\n"
     
@@ -79,6 +151,7 @@ def chat_interface(user_message, history, state):
 
     # Format recipes for display
     if recipes:
+        logger.info("Formatting recipes for display")
         response_message = extracted_info + f"Here are some recipes for you:\n\n"
         
         for i, recipe in enumerate(recipes):
@@ -118,17 +191,44 @@ def chat_interface(user_message, history, state):
             
             response_message += "---\n\n"
     else:
-        response_message = extracted_info + "I couldn't find any recipes matching your criteria. Please try providing more ingredients or different preferences."
+        logger.info("No recipes found or waiting for more information")
+        # Check if we have a prompt message in the state results
+        if "messages" in result:
+            assistant_messages = [msg for msg in result.get("messages", []) if msg.get("role") == "assistant"]
+            if assistant_messages:
+                latest_message = assistant_messages[-1]
+                prompt_message = latest_message.get("content", "")
+                if "ingredients" in prompt_message.lower():
+                    response_message = prompt_message
+                else:
+                    response_message = "I need specific ingredients to suggest recipes. Please tell me what ingredients you have available in your kitchen."
+            else:
+                response_message = "I need specific ingredients to suggest recipes. Please tell me what ingredients you have available in your kitchen."
+        else:
+            response_message = extracted_info + "I couldn't find any recipes matching your criteria. Please try providing specific ingredients you'd like to use."
 
     # Add messages to the history in the correct format for type="messages"
     history.append({"role": "user", "content": user_message})
     history.append({"role": "assistant", "content": response_message})
     
+    # Update the state with the most recent result
+    state = result
+    
+    # Ensure we have the messages array and add the latest exchange
+    if "messages" not in state:
+        state["messages"] = []
+    
+    # Add this conversation to the state
+    state["messages"].append({"role": "user", "content": user_message})
+    state["messages"].append({"role": "assistant", "content": response_message})
+    
+    logger.info("Response complete, returning to user")
     return "", history, state
 
+# Launch the gradio app
 with gr.Blocks() as demo:
     gr.Markdown("# 🥗 Recipe Finder Chatbot")
-    gr.Markdown("Ask me to find recipes based on ingredients you have. For example: 'I have chicken, pasta, and tomatoes. Can you suggest an Italian dish?'")
+    gr.Markdown("Tell me what **specific ingredients** you have available and I'll suggest recipes. For example: 'I have chicken, pasta, and tomatoes. Can you suggest an Italian dish?'")
     
     # Use a simpler Chatbot configuration compatible with older Gradio versions
     chatbot = gr.Chatbot(
@@ -137,11 +237,11 @@ with gr.Blocks() as demo:
         show_label=False
     )
     
-    state = gr.State({})  # Initialize state
+    state = gr.State(get_initial_state())  # Initialize state properly
     
     with gr.Row():
         user_input = gr.Textbox(
-            placeholder="Type your ingredients and preferences here...",
+            placeholder="List your ingredients here (e.g., 'I have eggs, cheese, spinach and want something quick')",
             show_label=False,
             scale=9
         )
@@ -159,4 +259,7 @@ with gr.Blocks() as demo:
     send_btn.click(chat_interface, [user_input, chatbot, state], [user_input, chatbot, state])
     user_input.submit(chat_interface, [user_input, chatbot, state], [user_input, chatbot, state])
 
+    logger.info("Gradio app initialized")
+
+logger.info("Starting Gradio server")
 demo.launch() 
